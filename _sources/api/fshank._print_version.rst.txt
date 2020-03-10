@@ -1,0 +1,8 @@
+fshank.\_print\_version module
+==============================
+
+.. automodule:: fshank._print_version
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:

@@ -1,0 +1,24 @@
+fshank package
+==============
+
+.. automodule:: fshank
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
+
+Subpackages
+-----------
+
+.. toctree::
+
+   fshank.fstab_template
+
+Submodules
+----------
+
+.. toctree::
+
+   fshank._print_version
+   fshank._version
+   fshank.main

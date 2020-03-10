@@ -1,0 +1,8 @@
+fshank.fstab\_template package
+==============================
+
+.. automodule:: fshank.fstab_template
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:

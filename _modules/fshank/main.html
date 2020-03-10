@@ -1,0 +1,369 @@
+
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8" />
+  
+  <!-- Licensed under the Apache 2.0 License -->
+  <link rel="stylesheet" type="text/css" href="../../_static/fonts/open-sans/stylesheet.css" />
+  <!-- Licensed under the SIL Open Font License -->
+  <link rel="stylesheet" type="text/css" href="../../_static/fonts/source-serif-pro/source-serif-pro.css" />
+  <link rel="stylesheet" type="text/css" href="../../_static/css/bootstrap.min.css" />
+  <link rel="stylesheet" type="text/css" href="../../_static/css/bootstrap-theme.min.css" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+    <title>fshank.main &#8212; fshank 2020-03-09a0.dev0 documentation</title>
+    <link rel="stylesheet" href="../../_static/guzzle.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <script id="documentation_options" data-url_root="../../" src="../../_static/documentation_options.js"></script>
+    <script src="../../_static/jquery.js"></script>
+    <script src="../../_static/underscore.js"></script>
+    <script src="../../_static/doctools.js"></script>
+    <script src="../../_static/language_data.js"></script>
+    <script crossorigin="anonymous" integrity="sha256-Ae2Vz/4ePdIu6ZyI/5ZGsYnb+m0JlOmKPjt6XZ9JJkA=" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.4/require.min.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+  
+   
+
+  </head><body>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">fshank 2020-03-09a0.dev0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" accesskey="U">Module code</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="container-wrapper">
+
+      <div id="mobile-toggle">
+        <a href="#"><span class="glyphicon glyphicon-align-justify" aria-hidden="true"></span></a>
+      </div>
+  <div id="left-column">
+    <div class="sphinxsidebar">
+<div class="sidebar-block">
+  <div class="sidebar-wrapper">
+    <div id="main-search">
+      <form class="form-inline" action="../../search.html" method="GET" role="form">
+        <div class="input-group">
+          <input name="q" type="text" class="form-control" placeholder="Search...">
+        </div>
+        <input type="hidden" name="check_keywords" value="yes" />
+        <input type="hidden" name="area" value="default" />
+      </form>
+    </div>
+  </div>
+</div>
+      
+    </div>
+  </div>
+        <div id="right-column">
+          
+          <div role="navigation" aria-label="breadcrumbs navigation">
+            <ol class="breadcrumb">
+              <li><a href="../../index.html">Docs</a></li>
+              
+                <li><a href="../index.html">Module code</a></li>
+              
+              <li>fshank.main</li>
+            </ol>
+          </div>
+          
+          <div class="document clearer body">
+            
+  <h1>Source code for fshank.main</h1><div class="highlight"><pre>
+<span></span><span class="c1"># fstab.py - read, manipulate, and write /etc/fstab files</span>
+<span class="c1"># Copyright (C) 2008  Canonical, Ltd.</span>
+<span class="c1">#</span>
+<span class="c1"># This program is free software: you can redistribute it and/or modify</span>
+<span class="c1"># it under the terms of the GNU General Public License as published by</span>
+<span class="c1"># the Free Software Foundation, version 3 of the License.</span>
+<span class="c1">#</span>
+<span class="c1"># This program is distributed in the hope that it will be useful,</span>
+<span class="c1"># but WITHOUT ANY WARRANTY; without even the implied warranty of</span>
+<span class="c1"># MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the</span>
+<span class="c1"># GNU General Public License for more details.</span>
+<span class="c1">#</span>
+<span class="c1"># You should have received a copy of the GNU General Public License</span>
+<span class="c1"># along with this program.  If not, see &lt;http://www.gnu.org/licenses/&gt;.</span>
+
+
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">dataclasses</span> <span class="k">as</span> <span class="nn">dc</span>
+<span class="kn">import</span> <span class="nn">pkgutil</span>
+<span class="kn">from</span> <span class="nn">warnings</span> <span class="kn">import</span> <span class="n">warn</span>
+
+<span class="kn">from</span> <span class="nn">jinja2</span> <span class="kn">import</span> <span class="n">Template</span>
+
+<span class="c1"># optional imports</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">pandas</span> <span class="k">as</span> <span class="nn">pd</span>
+<span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+    <span class="n">warn</span><span class="p">(</span><span class="s2">&quot;Pandas installation not found. Install with &#39;pretty&#39; extra.&quot;</span><span class="p">)</span>
+
+<span class="n">CONCRETE_COLUMNS</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;ws1&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;device&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ws2&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;directory&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ws3&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;fstype&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ws4&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;options&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ws5&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;dump&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ws6&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;fsck&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;ws7&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+<span class="n">ABSTRACT_COLUMNS</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="s2">&quot;device&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;directory&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;fstype&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;options&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;dump&quot;</span><span class="p">,</span>
+        <span class="s2">&quot;fsck&quot;</span><span class="p">,</span>
+    <span class="p">)</span>
+
+<span class="n">FSTAB_REGEX</span> <span class="o">=</span> <span class="sa">r</span><span class="s2">&quot;&quot;</span> \
+              <span class="sa">r</span><span class="s2">&quot;^(?P&lt;ws1&gt;\s*)&quot;</span> \
+              <span class="sa">r</span><span class="s2">&quot;(?P&lt;device&gt;\S*)&quot;</span> \
+              <span class="sa">r</span><span class="s2">&quot;(?P&lt;ws2&gt;\s+)&quot;</span> \
+              <span class="sa">r</span><span class="s2">&quot;(?P&lt;directory&gt;\S+)&quot;</span> \
+              <span class="sa">r</span><span class="s2">&quot;(?P&lt;ws3&gt;\s+)&quot;</span> \
+              <span class="sa">r</span><span class="s2">&quot;(?P&lt;fstype&gt;\S+)&quot;</span> \
+              <span class="sa">r</span><span class="s2">&quot;(?P&lt;ws4&gt;\s+)&quot;</span> \
+              <span class="sa">r</span><span class="s2">&quot;(?P&lt;options&gt;\S+)&quot;</span> \
+              <span class="sa">r</span><span class="s2">&quot;(?P&lt;ws5&gt;\s+)&quot;</span> \
+              <span class="sa">r</span><span class="s2">&quot;(?P&lt;dump&gt;\d+)&quot;</span> \
+              <span class="sa">r</span><span class="s2">&quot;(?P&lt;ws6&gt;\s+)&quot;</span> \
+              <span class="sa">r</span><span class="s2">&quot;(?P&lt;fsck&gt;\d+)&quot;</span> \
+              <span class="sa">r</span><span class="s2">&quot;(?P&lt;ws7&gt;\s*)$&quot;</span>
+
+<span class="n">COMMENT_CHARACTER</span> <span class="o">=</span> <span class="s2">&quot;#&quot;</span>
+
+<div class="viewcode-block" id="parse_line"><a class="viewcode-back" href="../../api/fshank.main.html#fshank.main.parse_line">[docs]</a><span class="k">def</span> <span class="nf">parse_line</span><span class="p">(</span><span class="n">line_str</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Parses a non-comment line of an fstab file using a regex.</span>
+
+<span class="sd">    Does no validation.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+
+<span class="sd">    line_str : str</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+
+<span class="sd">    entry : FstabEntry obj</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+
+    <span class="n">match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">match</span><span class="p">(</span><span class="n">FSTAB_REGEX</span><span class="p">,</span> <span class="n">line_str</span><span class="p">)</span>
+
+    <span class="n">cols</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="n">ABSTRACT_COLUMNS</span><span class="p">:</span>
+        <span class="n">cols</span><span class="p">[</span><span class="n">col</span><span class="p">]</span> <span class="o">=</span> <span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="n">col</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">FstabEntry</span><span class="p">(</span><span class="o">**</span><span class="n">cols</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="FstabEntry"><a class="viewcode-back" href="../../api/fshank.main.html#fshank.main.FstabEntry">[docs]</a><span class="nd">@dc</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">FstabEntry</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;A line in an /etc/fstab line.</span>
+
+<span class="sd">    Lines may or may not have a filesystem specification in them. The</span>
+<span class="sd">    has_filesystem method tells the user whether they do or not; if they</span>
+<span class="sd">    do, the attributes device, directory, fstype, options, dump, and</span>
+<span class="sd">    fsck contain the values of the corresponding fields, as instances of</span>
+<span class="sd">    the sub-classes of the LinePart class. For non-filesystem lines,</span>
+<span class="sd">    the attributes have the None value.</span>
+
+<span class="sd">    Lines may or may not be syntactically correct. If they are not,</span>
+<span class="sd">    they are treated as as non-filesystem lines.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">device</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">directory</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">fstype</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">options</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">dump</span><span class="p">:</span> <span class="nb">str</span>
+    <span class="n">fsck</span><span class="p">:</span> <span class="nb">str</span></div>
+
+<span class="n">HEADER</span> <span class="o">=</span> <span class="s2">&quot;# /etc/fstab: static file system information.&quot;</span>
+<span class="n">COLUMN_FIELDS</span> <span class="o">=</span> <span class="p">(</span>
+    <span class="s1">&#39;file_system&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;mount_point&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;type&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;options&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;dump&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;pass&#39;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="n">COLUMN_HEADER</span> <span class="o">=</span> <span class="s2">&quot;# &lt;file system&gt; &lt;mount point&gt;   &lt;type&gt;  &lt;options&gt;       &lt;dump&gt;  &lt;pass&gt;&quot;</span>
+
+<div class="viewcode-block" id="default_header"><a class="viewcode-back" href="../../api/fshank.main.html#fshank.main.default_header">[docs]</a><span class="k">def</span> <span class="nf">default_header</span><span class="p">():</span>
+    <span class="k">return</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="n">HEADER</span><span class="p">,</span> <span class="n">COLUMN_HEADER</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="get_fstab_template"><a class="viewcode-back" href="../../api/fshank.main.html#fshank.main.get_fstab_template">[docs]</a><span class="k">def</span> <span class="nf">get_fstab_template</span><span class="p">():</span>
+
+    <span class="n">path</span> <span class="o">=</span> <span class="s2">&quot;fstab_template/fstab.j2&quot;</span>
+
+    <span class="k">return</span> <span class="n">pkgutil</span><span class="o">.</span><span class="n">get_data</span><span class="p">(</span><span class="vm">__name__</span><span class="p">,</span>
+                         <span class="n">path</span><span class="p">)</span>\
+                  <span class="o">.</span><span class="n">decode</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="parse_fstab"><a class="viewcode-back" href="../../api/fshank.main.html#fshank.main.parse_fstab">[docs]</a><span class="k">def</span> <span class="nf">parse_fstab</span><span class="p">(</span><span class="n">file_str</span><span class="p">):</span>
+
+    <span class="n">entries</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">header_lines</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">file_str</span><span class="o">.</span><span class="n">splitlines</span><span class="p">():</span>
+
+        <span class="n">in_header</span> <span class="o">=</span> <span class="kc">True</span>
+
+        <span class="k">if</span> <span class="n">line</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s2">&quot;#&quot;</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">in_header</span><span class="p">:</span>
+                <span class="n">header_lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">pass</span>
+        <span class="k">elif</span> <span class="n">line</span><span class="o">.</span><span class="n">isspace</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">in_header</span><span class="p">:</span>
+                <span class="n">header_lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">pass</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">entries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">parse_line</span><span class="p">(</span><span class="n">line</span><span class="p">))</span>
+            <span class="n">in_header</span> <span class="o">=</span> <span class="kc">False</span>
+
+    <span class="n">header</span> <span class="o">=</span> <span class="s1">&#39;</span><span class="se">\n</span><span class="s1">&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">header_lines</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">Fstab</span><span class="p">(</span>
+        <span class="n">entries</span><span class="o">=</span><span class="n">entries</span><span class="p">,</span>
+        <span class="n">header</span><span class="o">=</span><span class="n">header</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="Fstab"><a class="viewcode-back" href="../../api/fshank.main.html#fshank.main.Fstab">[docs]</a><span class="nd">@dc</span><span class="o">.</span><span class="n">dataclass</span><span class="p">(</span><span class="n">frozen</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">class</span> <span class="nc">Fstab</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;An /etc/fstab file.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+
+<span class="sd">    entries : list of FstabEntry obj, optional</span>
+<span class="sd">        Entry objects to put in the Fstab</span>
+
+<span class="sd">    header : str, optional</span>
+<span class="sd">        An optional user defined header for the file. Uses default if Ellipsis</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">header</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="n">dc</span><span class="o">.</span><span class="n">field</span><span class="p">(</span><span class="n">default_factory</span><span class="o">=</span><span class="n">default_header</span><span class="p">)</span>
+    <span class="n">entries</span><span class="p">:</span> <span class="nb">tuple</span> <span class="o">=</span> <span class="p">()</span>
+
+<div class="viewcode-block" id="Fstab.to_df"><a class="viewcode-back" href="../../api/fshank.main.html#fshank.main.Fstab.to_df">[docs]</a>    <span class="k">def</span> <span class="nf">to_df</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+
+        <span class="n">df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+            <span class="p">[</span><span class="n">dc</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="n">entry</span><span class="p">)</span> <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">entries</span><span class="p">],</span>
+        <span class="p">)</span>
+        <span class="k">return</span> <span class="n">df</span></div>
+
+<div class="viewcode-block" id="Fstab.render"><a class="viewcode-back" href="../../api/fshank.main.html#fshank.main.Fstab.render">[docs]</a>    <span class="k">def</span> <span class="nf">render</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+
+<span class="sd">        ftab_str : str</span>
+<span class="sd">            The formmated fstab table</span>
+
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">template</span> <span class="o">=</span> <span class="n">Template</span><span class="p">(</span><span class="n">get_fstab_template</span><span class="p">())</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">template</span><span class="o">.</span><span class="n">render</span><span class="p">(</span><span class="o">**</span><span class="n">dc</span><span class="o">.</span><span class="n">asdict</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">result</span></div></div>
+
+
+<div class="viewcode-block" id="from_dataframe"><a class="viewcode-back" href="../../api/fshank.main.html#fshank.main.from_dataframe">[docs]</a><span class="k">def</span> <span class="nf">from_dataframe</span><span class="p">(</span><span class="n">fstab_df</span><span class="p">,</span>
+                   <span class="n">header</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+
+    <span class="n">entries</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">row_id</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">fstab_df</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
+        <span class="n">rec</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">colname</span> <span class="ow">in</span> <span class="n">ABSTRACT_COLUMNS</span><span class="p">:</span>
+            <span class="n">rec</span><span class="p">[</span><span class="n">colname</span><span class="p">]</span> <span class="o">=</span> <span class="n">row</span><span class="p">[</span><span class="n">colname</span><span class="p">]</span>
+
+        <span class="n">entries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">FstabEntry</span><span class="p">(</span><span class="o">**</span><span class="n">rec</span><span class="p">))</span>
+
+    <span class="n">fstab</span> <span class="o">=</span> <span class="n">Fstab</span><span class="p">(</span>
+        <span class="n">entries</span><span class="o">=</span><span class="n">entries</span><span class="p">,</span>
+        <span class="n">header</span><span class="o">=</span><span class="n">header</span>
+    <span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">fstab</span></div>
+
+<div class="viewcode-block" id="from_struct"><a class="viewcode-back" href="../../api/fshank.main.html#fshank.main.from_struct">[docs]</a><span class="k">def</span> <span class="nf">from_struct</span><span class="p">(</span><span class="n">fstab_struct</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Read it in from python dicts and lists.</span>
+
+<span class="sd">    This could be from a JSON file or something similar.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+
+<span class="sd">    fstab_struct : list of dict of str: val</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+
+<span class="sd">    fstab : Fstab obj</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">entries</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">fstab_struct</span><span class="p">:</span>
+        <span class="n">entries</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">FstabEntry</span><span class="p">(</span><span class="o">**</span><span class="n">entry</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">Fstab</span><span class="p">(</span><span class="n">entries</span><span class="o">=</span><span class="n">entries</span><span class="p">)</span></div>
+</pre></div>
+
+          </div>
+            
+        </div>
+        <div class="clearfix"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">fshank 2020-03-09a0.dev0 documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li> 
+      </ul>
+    </div>
+<script type="text/javascript">
+  $("#mobile-toggle a").click(function () {
+    $("#left-column").toggle();
+  });
+</script>
+<script type="text/javascript" src="../../_static/js/bootstrap.js"></script>
+  <div class="footer">
+    &copy; Copyright 2020, Samuel D. Lotz. Created using <a href="http://sphinx.pocoo.org/">Sphinx</a>.
+  </div>
+  </body>
+</html>

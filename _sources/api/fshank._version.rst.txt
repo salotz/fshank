@@ -1,0 +1,8 @@
+fshank.\_version module
+=======================
+
+.. automodule:: fshank._version
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:

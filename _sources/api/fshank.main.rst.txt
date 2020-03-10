@@ -1,0 +1,8 @@
+fshank.main module
+==================
+
+.. automodule:: fshank.main
+   :members:
+   :undoc-members:
+   :show-inheritance:
+   :private-members:
