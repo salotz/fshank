@@ -11,6 +11,7 @@ sphinx/_build
 
 # where apidoc puts sphinx files
 sphinx/_api
+sphinx/api
 
 # the directory all the virtual environments will be stored
 _venv
